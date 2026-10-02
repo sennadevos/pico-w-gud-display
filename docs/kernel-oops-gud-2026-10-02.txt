@@ -1,0 +1,79 @@
+Kernel oops in the gud driver, 2026-10-02 16:15:03 CEST
+=======================================================
+
+System:  Fedora 43 (wayblue niri image), kernel 6.19.11-200.fc43.x86_64
+Device:  Pico W GUD display (16d0:10a9) at usb 3-6, GUD card 3-6:1.0
+Context: the output's transform was being switched (90 <-> 180 <-> 270)
+         while the compositor kept committing frames, during diagnosis of
+         the smithay FB_DAMAGE_CLIPS rotation bug. The faulting task was the
+         compositor (niri, PID 1942) inside DRM_IOCTL_MODE_ATOMIC.
+
+Consequence: the oops wedged the USB hub workqueue. The device's disconnect at
+16:24 never completed, /sys/bus/usb/devices/3-6 lingers as a ghost, and anything
+reading USB descriptors (lsusb, the usb debugfs file) hangs in uninterruptible
+sleep. No USB device can enumerate again until the machine reboots. Not
+reproducible on demand so far - a single occurrence.
+
+The trace below is verbatim from dmesg.
+
+Aftermath observed before the reboot (uptime 277385):
+  * kworker/3:2+usb_hub_wq  stuck in D state from 16:15 (35+ minutes)
+  * kworker/u33:1+i915_flip stuck in D state
+  * /sys/bus/usb/devices/3-6 present as a ghost device; reading its
+    descriptors hangs any process in uninterruptible sleep
+
+[274835.149668] BUG: kernel NULL pointer dereference, address: 00000000000005d0
+[274835.149682] #PF: supervisor read access in kernel mode
+[274835.149686] #PF: error_code(0x0000) - not-present page
+[274835.149690] PGD 0 P4D 0 
+[274835.149696] Oops: Oops: 0000 [#1] SMP NOPTI
+[274835.149705] CPU: 5 UID: 1000 PID: 1942 Comm: niri Not tainted 6.19.11-200.fc43.x86_64 #1 PREEMPT(lazy) 
+[274835.149711] Hardware name: HP HP ProBook 440 G8 Notebook PC/8807, BIOS T85 Ver. 01.20.00 01/15/2025
+[274835.149714] RIP: 0010:gud_plane_atomic_update+0x148/0x460 [gud]
+[274835.149729] Code: 00 e8 2c 8b 2f cc 48 8d 74 24 0c 48 89 df e8 cf 4b cb cb 84 c0 0f 84 0e 02 00 00 48 8b 04 24 48 83 78 10 00 0f 84 ed 02 00 00 <49> 8b 86 d0 05 00 00 0f b6 50 0a 4d 85 e4 0f 84 94 02 00 00 f6 c2
+[274835.149734] RSP: 0018:ffffd0324960ba20 EFLAGS: 00010282
+[274835.149739] RAX: ffff8d545e9d2c00 RBX: ffff8d53e761c000 RCX: 0000000000000000
+[274835.149742] RDX: 0000000000000001 RSI: ffffd0324960ba2c RDI: ffffffff903594a0
+[274835.149745] RBP: ffffd0324960bab0 R08: ffff8d545e9d2c00 R09: 0000000000000000
+[274835.149748] R10: ffff8d543d058e00 R11: 0000000000000002 R12: 0000000000000000
+[274835.149751] R13: ffff8d545e9d0c00 R14: 0000000000000000 R15: ffff8d545e9d0c00
+[274835.149754] FS:  00007fba6fb75540(0000) GS:ffff8d5bbe86f000(0000) knlGS:0000000000000000
+[274835.149757] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+[274835.149760] CR2: 00000000000005d0 CR3: 000000015e754003 CR4: 0000000000f72ef0
+[274835.149764] PKRU: 55555554
+[274835.149766] Call Trace:
+[274835.149771]  <TASK>
+[274835.149786]  drm_atomic_helper_commit_planes+0x28e/0x310
+[274835.149798]  drm_atomic_helper_commit_tail+0x5e/0xc0
+[274835.149804]  commit_tail+0xf1/0x150
+[274835.149810]  drm_atomic_helper_commit+0x13c/0x180
+[274835.149816]  drm_atomic_commit+0xb1/0xe0
+[274835.149822]  ? __pfx___drm_printfn_info+0x10/0x10
+[274835.149830]  drm_mode_atomic_ioctl+0x72b/0x7e0
+[274835.149837]  ? __pfx_drm_mode_atomic_ioctl+0x10/0x10
+[274835.149842]  drm_ioctl_kernel+0xae/0x100
+[274835.149849]  drm_ioctl+0x2a8/0x540
+[274835.149854]  ? __pfx_drm_mode_atomic_ioctl+0x10/0x10
+[274835.149861]  __x64_sys_ioctl+0x97/0xe0
+[274835.149869]  do_syscall_64+0x7e/0x690
+[274835.149878]  ? handle_mm_fault+0x212/0x340
+[274835.149884]  ? do_user_addr_fault+0x2b4/0x7b0
+[274835.149891]  ? clear_bhb_loop+0x50/0xa0
+[274835.149896]  ? clear_bhb_loop+0x50/0xa0
+[274835.149900]  ? clear_bhb_loop+0x50/0xa0
+[274835.149903]  ? clear_bhb_loop+0x50/0xa0
+[274835.149908]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+[274835.149913] RIP: 0033:0x55a9dc623340
+[274835.149971] Code: 89 45 a4 4c 89 45 a8 4c 89 6d b0 4c 89 65 b8 4c 89 75 c0 0f 57 c0 0f 11 45 c8 48 8d 55 a0 b8 10 00 00 00 be bc 64 38 c0 0f 05 <49> 89 c7 48 83 3b 00 74 09 4c 89 c7 ff 15 66 64 96 00 48 83 7b 18
+[274835.149975] RSP: 002b:00007fff925708e0 EFLAGS: 00000297 ORIG_RAX: 0000000000000010
+[274835.149980] RAX: ffffffffffffffda RBX: 00007fff92570958 RCX: 000055a9dc623340
+[274835.149983] RDX: 00007fff925708e0 RSI: 00000000c03864bc RDI: 00000000000001f5
+[274835.149986] RBP: 00007fff92570940 R08: 000055a9ff28ed40 R09: 0000000000000001
+[274835.149989] R10: 0000000000000018 R11: 0000000000000297 R12: 000055a9fea5ea50
+[274835.149992] R13: 000055aa00b5b5a0 R14: 000055aa00ceb760 R15: 000055aa00bc8550
+[274835.149997]  </TASK>
+[274835.149999] Modules linked in: gud hid_logitech_hidpp exfat uas usb_storage cdc_acm uhid rfcomm snd_seq_dummy snd_hrtimer uinput wireguard libcurve25519 ip6_udp_tunnel udp_tunnel nft_fib_inet nft_fib_ipv4 nft_fib_ipv6 nft_fib nft_reject_inet nf_reject_ipv4 nf_reject_ipv6 nft_reject nft_ct nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 nf_tables qrtr bnep sunrpc snd_ctl_led binfmt_misc snd_soc_skl_hda_dsp snd_soc_intel_sof_board_helpers snd_sof_probes snd_soc_intel_hda_dsp_common snd_hda_codec_intelhdmi snd_hda_codec_alc269 snd_hda_scodec_component snd_hda_codec_realtek_lib snd_soc_dmic snd_hda_codec_generic snd_hda_intel snd_sof_pci_intel_tgl snd_sof_pci_intel_cnl snd_sof_intel_hda_generic soundwire_intel snd_sof_intel_hda_sdw_bpt snd_sof_intel_hda_common snd_soc_hdac_hda snd_sof_intel_hda_mlink snd_sof_intel_hda snd_hda_codec_hdmi soundwire_cadence snd_sof_pci snd_sof_xtensa_dsp snd_sof snd_sof_utils snd_soc_acpi_intel_match snd_soc_acpi_intel_sdca_quirks soundwire_generic_allocation
+[274835.150083]  snd_soc_sdw_utils snd_soc_acpi crc8 soundwire_bus snd_soc_sdca snd_soc_avs snd_soc_hda_codec intel_uncore_frequency snd_hda_ext_core intel_uncore_frequency_common snd_hda_codec snd_hda_core x86_pkg_temp_thermal snd_intel_dspcfg intel_powerclamp iwlmvm snd_intel_sdw_acpi coretemp snd_hwdep snd_soc_core kvm_intel snd_compress mac80211 processor_thermal_device_pci_legacy vfat ac97_bus processor_thermal_device btusb uvcvideo fat kvm snd_pcm_dmaengine processor_thermal_wt_hint btmtk libarc4 uvc platform_temperature_control snd_seq btrtl videobuf2_vmalloc hp_bioscfg processor_thermal_soc_slider iTCO_wdt snd_seq_device irqbypass btbcm mei_hdcp videobuf2_memops iwlwifi processor_thermal_rfim firmware_attributes_class mei_pxp intel_pmc_bxt ee1004 snd_pcm intel_rapl_msr rapl spi_nor btintel videobuf2_v4l2 processor_thermal_rapl mtd iTCO_vendor_support videobuf2_common intel_cstate snd_timer intel_rapl_common hp_wmi mei_me cfg80211 bluetooth intel_uncore videodev spi_intel_pci snd processor_thermal_wt_req pcspkr
+[274835.150186]  i2c_i801 platform_profile e1000e wmi_bmof mei i2c_smbus spi_intel soundcore processor_thermal_power_floor idma64 mc rfkill processor_thermal_mbox intel_pmc_core intel_soc_dts_iosf igen6_edac pmt_telemetry pmt_discovery int3403_thermal int340x_thermal_zone pmt_class int3400_thermal intel_hid acpi_pad wireless_hotkey intel_pmc_ssram_telemetry acpi_thermal_rel sparse_keymap joydev tun loop nfnetlink zram lz4hc_compress lz4_compress overlay erofs netfs dm_crypt xe drm_gpuvm drm_gpusvm_helper gpu_sched drm_ttm_helper drm_exec drm_suballoc_helper i915 drm_buddy nvme ttm nvme_core ucsi_acpi i2c_algo_bit typec_ucsi nvme_keyring drm_display_helper typec video nvme_auth hid_multitouch ghash_clmulni_intel thunderbolt hkdf intel_vsec cec vmd i2c_hid_acpi i2c_hid wmi intel_oc_wdt pinctrl_tigerlake serio_raw fuse i2c_dev
+[274835.150287] CR2: 00000000000005d0
+[274835.150292] ---[ end trace 0000000000000000 ]---

@@ -101,6 +101,11 @@ merge. Don't spend time on it; bytes per pixel is the lever that matters.
   is not visible to processes niri spawns (`sh: kitty: command not found`), so
   a spawned test window silently never appears. Use a system-path binary such
   as `/usr/bin/alacritty` (or give the full path) for spawned test windows.
+* **A kernel oops in `gud_plane_atomic_update` wedged the USB hub workqueue**
+  (2026-10-02, see `docs/kernel-oops-gud-2026-10-02.txt`). Symptoms afterwards:
+  the Pico cannot enumerate at all and `lsusb` hangs in D state. Nothing clears
+  a wedged workqueue except a reboot. The oops happened while output transforms
+  were being switched rapidly during diagnosis of the smithay rotation bug.
 * Spawning a window to exercise the panel steals keyboard focus; restore it
   afterwards with `niri msg action focus-window --id <previously focused id>`
   (record it before spawning — `niri msg focused-window` may be empty).

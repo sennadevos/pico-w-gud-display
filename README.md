@@ -181,6 +181,10 @@ sudo build/poll-host 6     # frame counter at ~3 kHz, for timing screen updates
   dead output that logs errors until the compositor restarts.
 * **Corrupted image.** The SPI link has hit its limit — rebuild with a lower
   `SCREEN_SPI_HZ`.
+* **The device stops enumerating and `lsusb` hangs.** Check `dmesg` for a
+  `BUG:`/`Oops:` in `gud_plane_atomic_update`; if present, the kernel oopsed and
+  can leave the USB hub workqueue wedged (kworkers in `D` state). A reboot is
+  required. One such trace is kept in `docs/`.
 * **Panel dark while USB is connected.** The backlight follows DPMS; check the
   connector's brightness/DPMS properties, or probe `probe-host` for the frame
   counters.
