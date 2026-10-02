@@ -148,7 +148,9 @@ sudo build/poll-host 6     # frame counter at ~3 kHz, for timing screen updates
   while compositors render XRGB8888 — so every page flip from one format to the
   other is rejected with `EINVAL`, forever, and the panel stays black while USB
   looks perfectly healthy. Advertising a single format makes fbcon and the
-  compositor agree. Do not add RGB565 back without solving this.
+  compositor agree. Do not add RGB565 back without solving this — halving the
+  payload is worth doing, and `AGENTS.md` records exactly where the kernel
+  performs the conversion and what blocks the switch.
 * **Bounded transfers.** The device reports a maximum buffer size, so the kernel
   splits damage into rectangles of at most that size; the firmware never needs a
   full framebuffer (307,200 B) — only two 64 KiB buffers.
