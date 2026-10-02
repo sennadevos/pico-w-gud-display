@@ -114,3 +114,11 @@ merge. Don't spend time on it; bytes per pixel is the lever that matters.
   `echo 0x2 > /sys/module/drm/parameters/debug` (DRIVER category — `drm_dbg`
   in gud is DRIVER, not KMS) and observing that a 90° full-screen repaint
   covered only 240 rows.
+  On this machine the fix is set up via a locally built niri main — it takes
+  effect at the next login: binary at `~/.local/bin/niri` (niri 26.04,
+  ed22699), source at `~/.local/src/niri`, built in the `niri-build` distrobox,
+  enabled with the systemd user override
+  `~/.config/systemd/user/niri.service.d/override.conf` (an unmanaged file —
+  not in chezmoi). Roll back by deleting that override and running
+  `systemctl --user daemon-reload`, then logging in again. Remove it once a
+  niri release or Fedora package includes the fix.
