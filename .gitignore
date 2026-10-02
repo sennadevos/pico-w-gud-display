@@ -1,0 +1,6 @@
+.deps/
+.distrobox-home/
+build/
+dist/
+__pycache__/
+.pytest_cache/
