@@ -198,4 +198,5 @@ sudo build/poll-host 6     # frame counter at ~3 kHz, for timing screen updates
 ## License
 
 MIT — see `LICENSE`. Vendored GUD protocol code is MIT (© Noralf Trønnes) and
-the LZ4 implementation is BSD-2-Clause; notices are in `third_party/gud/`.
+the LZ4 implementation is BSD-2-Clause; their notices are in
+`third_party/gud/LICENSE.md` and the headers of the respective source files.
