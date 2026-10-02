@@ -104,3 +104,13 @@ merge. Don't spend time on it; bytes per pixel is the lever that matters.
 * Spawning a window to exercise the panel steals keyboard focus; restore it
   afterwards with `niri msg action focus-window --id <previously focused id>`
   (record it before spawning — `niri msg focused-window` may be empty).
+* **Rotating the output 90° or 270° leaves the bottom 80 rows of the panel
+  stale.** smithay did not transform `FB_DAMAGE_CLIPS` into framebuffer space,
+  so GUD clipped every damage rect to 240×240 of the 240×320 buffer. Fixed
+  upstream in smithay commit `298ebc9` (2026-06-01, Fixes Smithay/smithay#1651).
+  niri main includes it (smithay update commit 2026-07-19); releases up to
+  v26.04 do not, so with niri ≤ v26.04 use `transform normal` or `180`.
+  Diagnosed here by logging `gud_flush_damage` rects with
+  `echo 0x2 > /sys/module/drm/parameters/debug` (DRIVER category — `drm_dbg`
+  in gud is DRIVER, not KMS) and observing that a 90° full-screen repaint
+  covered only 240 rows.

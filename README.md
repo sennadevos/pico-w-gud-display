@@ -184,6 +184,15 @@ sudo build/poll-host 6     # frame counter at ~3 kHz, for timing screen updates
 * **Panel dark while USB is connected.** The backlight follows DPMS; check the
   connector's brightness/DPMS properties, or probe `probe-host` for the frame
   counters.
+* **Rotating the output 90° or 270° leaves the bottom of the panel stale.** This
+  is an upstream compositor bug, not a firmware one: damage rectangles were
+  passed to the kernel in output coordinates instead of framebuffer coordinates,
+  so GUD — which repaints only the reported regions — clipped every update to
+  the top 240 rows. Fixed in smithay commit `298ebc9` (June 2026, Smithay
+  issue #1651); compositors pinning older smithay (niri ≤ v26.04) still show it.
+  Use `transform normal` or `180` with those, or update the compositor. The
+  panel is what exposed it: GUD is one of the few drivers that honours
+  `FB_DAMAGE_CLIPS` strictly.
 
 ## References
 
