@@ -1,6 +1,8 @@
 #ifndef SCREEN_CONFIG_H
 #define SCREEN_CONFIG_H
 
+#include "board.h"
+
 #ifndef SCREEN_ROTATION
 #define SCREEN_ROTATION 0
 #endif
@@ -8,25 +10,24 @@
 #define SCREEN_SPI_HZ 10000000
 #endif
 
-/* GPIO numbers, not physical header positions. */
-#define SCREEN_PIN_MISO 16
-#define SCREEN_PIN_CS 17
-#define SCREEN_PIN_SCK 18
-#define SCREEN_PIN_MOSI 19
-#define SCREEN_PIN_DC 20
-#define SCREEN_PIN_RESET 21
-#define SCREEN_PIN_BACKLIGHT 22
-
-#if SCREEN_ROTATION == 90 || SCREEN_ROTATION == 270
-#define SCREEN_WIDTH 320
-#define SCREEN_HEIGHT 240
-#define SCREEN_WIDTH_MM 65
-#define SCREEN_HEIGHT_MM 49
+/* The board defines its own SPI instance (the pins dictate which one). */
+#if SCREEN_SPI_INDEX == 1
+#define SCREEN_SPI spi1
 #else
-#define SCREEN_WIDTH 240
-#define SCREEN_HEIGHT 320
-#define SCREEN_WIDTH_MM 49
-#define SCREEN_HEIGHT_MM 65
+#define SCREEN_SPI spi0
+#endif
+
+/* Rotation swaps the panel's base geometry; see board.h for the base. */
+#if SCREEN_ROTATION == 90 || SCREEN_ROTATION == 270
+#define SCREEN_WIDTH SCREEN_BASE_HEIGHT
+#define SCREEN_HEIGHT SCREEN_BASE_WIDTH
+#define SCREEN_WIDTH_MM SCREEN_BASE_HEIGHT_MM
+#define SCREEN_HEIGHT_MM SCREEN_BASE_WIDTH_MM
+#else
+#define SCREEN_WIDTH SCREEN_BASE_WIDTH
+#define SCREEN_HEIGHT SCREEN_BASE_HEIGHT
+#define SCREEN_WIDTH_MM SCREEN_BASE_WIDTH_MM
+#define SCREEN_HEIGHT_MM SCREEN_BASE_HEIGHT_MM
 #endif
 
 /* Two bounded transfer buffers instead of two full framebuffers (307200 B).

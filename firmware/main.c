@@ -37,7 +37,7 @@ static struct gud_display_timings timings = {
 };
 
 static const struct gud_display_edid edid = {
-    .name = "PicoW-TFT",
+    .name = SCREEN_EDID_NAME,
     .pnp = "GUD",
     .product_code = 0x3222,
     .year = 2026,
@@ -124,7 +124,7 @@ void tud_suspend_cb(bool remote_wakeup_enabled) {
 void tud_resume_cb(void) { panel_set_enabled(true); }
 
 int main(void) {
-    bi_decl(bi_program_description("RP2040 Pico W, LCDWIKI MSP3222/MSP3223, native Linux GUD"));
+    bi_decl(bi_program_description(SCREEN_DESCRIPTION));
     bi_decl(bi_1pin_with_name(SCREEN_PIN_MISO, "TFT MISO"));
     bi_decl(bi_1pin_with_name(SCREEN_PIN_CS, "TFT CS"));
     bi_decl(bi_1pin_with_name(SCREEN_PIN_SCK, "TFT SCK"));

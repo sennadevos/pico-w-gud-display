@@ -65,7 +65,9 @@ int main(void) {
         goto out;
     }
     printf("Controller ID   : 0x%06x %s\n", d.controller_id,
-           (d.controller_id & 0xffff) == 0x9341 ? "(ILI9341V ok)" : "(UNEXPECTED)");
+           (d.controller_id & 0xffff) == 0x9341  ? "(ILI9341 ok)"
+           : d.controller_id == 0x52             ? "(ST7789 2.8\" ok)"
+                                                 : "(check README)");
     printf("SPI clock       : %u Hz\n", d.spi_hz);
     printf("Frames written  : %u (failed %u)\n", d.completed, d.failed);
     printf("Panel size      : %ux%u\n", d.width, d.height);
@@ -83,7 +85,7 @@ int main(void) {
             all_zero &= all[i][j] == 0x00;
             all_ff &= all[i][j] == 0xff;
         }
-    if ((d.controller_id & 0xffff) == 0x9341)
+    if ((d.controller_id & 0xffff) == 0x9341 || d.controller_id == 0x52)
         printf("  Panel answered on MISO. SPI and the panel are working.\n");
     else if (all_zero)
         printf("  MISO reads constant 0x00: MISO disconnected, or the panel is held\n"

@@ -1,8 +1,15 @@
 cmake_minimum_required(VERSION 3.17)
 
-set(PICO_BOARD pico_w CACHE STRING "Target board")
-if(NOT PICO_BOARD STREQUAL "pico_w")
-    message(FATAL_ERROR "This project targets the original RP2040 Pico W, not Pico 2 W.")
+set(PICO_BOARD pico_w CACHE STRING "Target board (pico_w or pico for the RP2040 boards)")
+set(SCREEN_BOARD lcdwiki CACHE STRING "Display module: lcdwiki or waveshare")
+if(SCREEN_BOARD STREQUAL "lcdwiki")
+    set(SCREEN_BOARD_DEFINE SCREEN_BOARD_LCDWIKI)
+    set(SCREEN_PROGRAM_NAME "Pico W LCDWIKI GUD display")
+elseif(SCREEN_BOARD STREQUAL "waveshare")
+    set(SCREEN_BOARD_DEFINE SCREEN_BOARD_WAVESHARE_RESTOUCH)
+    set(SCREEN_PROGRAM_NAME "Pico ResTouch 2.8 GUD display")
+else()
+    message(FATAL_ERROR "SCREEN_BOARD must be lcdwiki or waveshare.")
 endif()
 if(NOT PICO_SDK_PATH)
     set(PICO_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/.deps/pico-sdk")
@@ -41,6 +48,7 @@ add_executable(pico_w_screen
 )
 target_include_directories(pico_w_screen PRIVATE firmware third_party/gud)
 target_compile_definitions(pico_w_screen PRIVATE
+    ${SCREEN_BOARD_DEFINE}
     SCREEN_ROTATION=${SCREEN_ROTATION}
     SCREEN_SPI_HZ=${SCREEN_SPI_HZ}
     LZ4_FORCE_MEMORY_ACCESS=0
@@ -52,7 +60,7 @@ target_link_libraries(pico_w_screen PRIVATE
 )
 pico_enable_stdio_uart(pico_w_screen 0)
 pico_enable_stdio_usb(pico_w_screen 0)
-pico_set_program_name(pico_w_screen "Pico W LCDWIKI GUD display")
+pico_set_program_name(pico_w_screen "${SCREEN_PROGRAM_NAME}")
 pico_set_program_version(pico_w_screen "0.1.0")
 pico_add_extra_outputs(pico_w_screen)
 

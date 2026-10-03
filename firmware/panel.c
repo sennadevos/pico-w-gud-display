@@ -8,17 +8,21 @@
 
 #include <assert.h>
 
-/* Blocking SPI throughout: a full 240x320 RGB565 frame takes ~140 ms at the
- * panel's 10 MHz limit, which is far inside every USB timeout and removes the
- * DMA/FIFO interaction from the bring-up path entirely.
+/* Blocking SPI throughout: a full frame takes only a few milliseconds at the
+ * configured clock, far inside every USB timeout, and it removes the DMA/FIFO
+ * interaction from the bring-up path entirely.
  */
 static bool display_enabled;
 static unsigned int brightness = SCREEN_BACKLIGHT_DEFAULT;
 static struct panel_probe probe;
 static uint32_t actual_spi_hz;
 
-/* LCDWIKI's exact MSP3222/MSP3223 IPS sequence, not a generic TN sequence.
- * https://www.lcdwiki.com/res/MSP3222_MSP3223/ILI9341V_Init.txt
+/* Panel init sequences come from each module's manufacturer.
+ *
+ * ILI9341 (LCDWIKI MSP3222/MSP3223):
+ *   https://www.lcdwiki.com/res/MSP3222_MSP3223/ILI9341V_Init.txt
+ * ST7789 (Waveshare Pico-ResTouch-LCD-2.8):
+ *   their C demo, lib/lcd/LCD_Driver.c, LCD_InitReg() LCD_2_8 branch.
  */
 struct panel_init_command {
     uint8_t command;
@@ -26,6 +30,28 @@ struct panel_init_command {
     uint8_t data[15];
 };
 
+#if SCREEN_PANEL_ST7789
+static const struct panel_init_command init_commands[] = {
+    {0x36, 1, {0x00}}, /* address mode; replaced below by the rotation value */
+    {0x3a, 1, {0x55}}, /* RGB565 */
+    {0xb2, 5, {0x0c, 0x0c, 0x00, 0x33, 0x33}},
+    {0xb7, 1, {0x35}},
+    {0xbb, 1, {0x28}},
+    {0xc0, 1, {0x3c}},
+    {0xc2, 1, {0x01}},
+    {0xc3, 1, {0x0b}},
+    {0xc4, 1, {0x20}},
+    {0xc6, 1, {0x0f}},
+    {0xd0, 2, {0xa4, 0xa1}},
+    {0xe0,
+     14,
+     {0xd0, 0x01, 0x08, 0x0f, 0x11, 0x2a, 0x36, 0x55, 0x44, 0x3a, 0x0b, 0x06, 0x11, 0x20}},
+    {0xe1,
+     14,
+     {0xd0, 0x02, 0x07, 0x0a, 0x0b, 0x18, 0x34, 0x43, 0x4a, 0x2b, 0x1b, 0x1c, 0x22, 0x1f}},
+    {0x55, 1, {0xb0}},
+};
+#else
 static const struct panel_init_command init_commands[] = {
     {0xcf, 3, {0x00, 0xc1, 0x30}},
     {0xed, 4, {0x64, 0x03, 0x12, 0x81}},
@@ -51,50 +77,59 @@ static const struct panel_init_command init_commands[] = {
      15,
      {0x00, 0x0a, 0x0f, 0x04, 0x11, 0x08, 0x36, 0x58, 0x4d, 0x07, 0x10, 0x0c, 0x32, 0x34, 0x0f}},
 };
+#endif
 
 void panel_wait(void) {
     /* Nothing is left in flight after spi_write*_blocking returns. */
-    while (spi_is_busy(spi0))
+    while (spi_is_busy(SCREEN_SPI))
         tight_loop_contents();
 }
 
 static void command(uint8_t value, const uint8_t *data, size_t length) {
     panel_wait();
-    spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-    spi_set_baudrate(spi0, SCREEN_SPI_HZ);
+    spi_set_format(SCREEN_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    spi_set_baudrate(SCREEN_SPI, SCREEN_SPI_HZ);
     gpio_put(SCREEN_PIN_CS, 0);
     gpio_put(SCREEN_PIN_DC, 0);
-    spi_write_blocking(spi0, &value, 1);
+    spi_write_blocking(SCREEN_SPI, &value, 1);
     if (length) {
         gpio_put(SCREEN_PIN_DC, 1);
-        spi_write_blocking(spi0, data, length);
+        spi_write_blocking(SCREEN_SPI, data, length);
     }
     gpio_put(SCREEN_PIN_CS, 1);
 }
 
 static void read_registers(uint8_t command_code, uint8_t *out, size_t length) {
     panel_wait();
-    spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-    spi_set_baudrate(spi0, 1000000); /* Read timing limit is lower than write. */
+    spi_set_format(SCREEN_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    spi_set_baudrate(SCREEN_SPI, 1000000); /* Read timing limit is lower than write. */
     gpio_put(SCREEN_PIN_CS, 0);
     gpio_put(SCREEN_PIN_DC, 0);
-    spi_write_blocking(spi0, &command_code, 1);
+    spi_write_blocking(SCREEN_SPI, &command_code, 1);
     gpio_put(SCREEN_PIN_DC, 1);
     /* The controller shifts out on the falling edge; MOSI is clocked with 0. */
-    spi_read_blocking(spi0, 0, out, length);
+    spi_read_blocking(SCREEN_SPI, 0, out, length);
     gpio_put(SCREEN_PIN_CS, 1);
 }
 
 static void probe_panel(void) {
+#if SCREEN_PANEL_ST7789
+    /* ST7789 has no RDID4. Waveshare read the panel's RDID3 (0xDC), which
+     * returns 0x52 on the 2.8" module and 0x00 on their 3.5" variant. */
+    read_registers(0xdc, probe.rdid4, 1);
+    read_registers(0xdc, probe.rdid4_repeat, 1);
+    probe.controller_id = probe.rdid4[0];
+#else
     /* RDID4 returns a dummy byte, revision, then 0x93 and 0x41. */
     read_registers(0xd3, probe.rdid4, sizeof(probe.rdid4));
     read_registers(0xd3, probe.rdid4_repeat, sizeof(probe.rdid4_repeat));
+    probe.controller_id =
+        ((uint32_t)probe.rdid4[1] << 16) | ((uint32_t)probe.rdid4[2] << 8) | probe.rdid4[3];
+#endif
     for (size_t i = 0; i < sizeof(probe.status); ++i) {
         uint8_t code = (uint8_t)(0x0a + i);
         read_registers(code, &probe.status[i], 1);
     }
-    probe.controller_id =
-        ((uint32_t)probe.rdid4[1] << 16) | ((uint32_t)probe.rdid4[2] << 8) | probe.rdid4[3];
 }
 
 static void update_backlight(void) {
@@ -123,8 +158,8 @@ void panel_init(void) {
         gpio_put(output_pins[i], output_pins[i] != SCREEN_PIN_BACKLIGHT);
         gpio_set_dir(output_pins[i], GPIO_OUT);
     }
-    actual_spi_hz = spi_init(spi0, SCREEN_SPI_HZ);
-    spi_set_format(spi0, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    actual_spi_hz = spi_init(SCREEN_SPI, SCREEN_SPI_HZ);
+    spi_set_format(SCREEN_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
     gpio_set_function(SCREEN_PIN_SCK, GPIO_FUNC_SPI);
     gpio_set_function(SCREEN_PIN_MOSI, GPIO_FUNC_SPI);
     gpio_set_function(SCREEN_PIN_MISO, GPIO_FUNC_SPI);
@@ -144,10 +179,30 @@ void panel_init(void) {
     probe.spi_hz = actual_spi_hz;
     probe_panel();
 
+#if SCREEN_PANEL_ST7789
+    /* The ST7789 sequence expects sleep-out before the configuration registers
+     * (Waveshare's demo does 0x11 first, then a 100 ms delay). */
+    command(0x11, NULL, 0);
+    sleep_ms(100);
+#endif
     /* An unavailable MISO read must not prevent write-only operation. */
     for (size_t i = 0; i < sizeof(init_commands) / sizeof(init_commands[0]); ++i)
         command(init_commands[i].command, init_commands[i].data, init_commands[i].length);
 
+#if SCREEN_PANEL_ST7789
+    /* Waveshare's LCD_SetGramScanWay() values for the 2.8" ST7789 module:
+     * D2U_L2R=0xA0, L2R_U2D=0x00, R2L_D2U=0xC0, U2D_R2L=0x60. Rotation 0 is
+     * the module's physical landscape orientation. */
+#if SCREEN_ROTATION == 0
+    const uint8_t address_mode = 0xa0;
+#elif SCREEN_ROTATION == 90
+    const uint8_t address_mode = 0x00;
+#elif SCREEN_ROTATION == 180
+    const uint8_t address_mode = 0x60;
+#else
+    const uint8_t address_mode = 0xc0;
+#endif
+#else
 #if SCREEN_ROTATION == 0
     const uint8_t address_mode = 0x08;
 #elif SCREEN_ROTATION == 90
@@ -157,9 +212,12 @@ void panel_init(void) {
 #else
     const uint8_t address_mode = 0xa8;
 #endif
+#endif
     command(0x36, &address_mode, 1);
+#if !SCREEN_PANEL_ST7789
     command(0x11, NULL, 0);
     sleep_ms(120);
+#endif
     command(0x29, NULL, 0);
     sleep_ms(20);
 }
@@ -177,12 +235,12 @@ void panel_write(uint16_t x, uint16_t y, uint16_t width, uint16_t height, const 
     gpio_put(SCREEN_PIN_CS, 0);
     gpio_put(SCREEN_PIN_DC, 0);
     const uint8_t write_memory = 0x2c;
-    spi_write_blocking(spi0, &write_memory, 1);
+    spi_write_blocking(SCREEN_SPI, &write_memory, 1);
     gpio_put(SCREEN_PIN_DC, 1);
     /* Native little-endian RGB565 words become MSB-first bytes on the wire. */
-    spi_set_format(spi0, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
-    actual_spi_hz = spi_set_baudrate(spi0, SCREEN_SPI_HZ);
-    spi_write16_blocking(spi0, pixels, (size_t)width * height);
+    spi_set_format(SCREEN_SPI, 16, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+    actual_spi_hz = spi_set_baudrate(SCREEN_SPI, SCREEN_SPI_HZ);
+    spi_write16_blocking(SCREEN_SPI, pixels, (size_t)width * height);
     gpio_put(SCREEN_PIN_CS, 1);
 }
 

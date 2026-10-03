@@ -43,8 +43,7 @@ uint16_t const *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {
     (void)langid;
     static uint16_t descriptor[32];
     char serial[PICO_UNIQUE_BOARD_ID_SIZE_BYTES * 2 + 1];
-    const char *strings[] = {NULL, "Pico W project", "Pico W LCDWIKI Display", serial,
-                             "GUD Display"};
+    const char *strings[] = {NULL, "Pico project", SCREEN_USB_PRODUCT, serial, "GUD Display"};
     size_t length;
 
     if (index == 0) {

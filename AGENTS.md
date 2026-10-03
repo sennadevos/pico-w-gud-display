@@ -22,10 +22,18 @@ on `firmware/` and the protocol test harness.
 
 ## Current device state
 
-* The Pico W on this machine runs firmware built from this repo at the default
-  settings: 62.5 MHz SPI, 64 KiB transfer buffers, rotation 0, XRGB8888.
-* Panel: LCDWIKI MSP3222 (no touch), wired as in the README.
-* Verified with niri on Fedora (kernel 6.19).
+* Two modules are supported; the pins and panel sequences live in
+  `firmware/board.h` and are selected with `SCREEN_BOARD=lcdwiki|waveshare`.
+* Waveshare Pico-ResTouch-LCD-2.8 on a **plain Pico (RP2040)**: currently
+  flashed, verified working (image correct, landscape 320×240) on 2026-10-03.
+  Built with `bash tooling/build.sh -DPICO_BOARD=pico -DSCREEN_BOARD=waveshare`.
+* LCDWIKI MSP3222/MSP3223 on the **Pico W**: the default build
+  (`-DPICO_BOARD=pico_w -DSCREEN_BOARD=lcdwiki`), portrait 240×320, 62.5 MHz
+  SPI, 64 KiB buffers — that is the firmware on the Pico W from 2026-10-02.
+* The build directory caches the last `PICO_BOARD`/`SCREEN_BOARD`; pass the
+  flags again to switch modules, and reflash.
+* Verified with niri on Fedora (kernel 6.19) — niri here is a locally built
+  main for the rotation fix, see the trap below.
 * Datasheets for the parts are filed under `~/Documents/Datasheets/`.
 
 ## Known opportunity: halve USB traffic (RGB565 on the wire)
